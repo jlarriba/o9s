@@ -85,3 +85,11 @@ func (n *Network) Show(ctx context.Context, c *client.OpenStack, id string) ([][
 		{"Description", net.Description},
 	}, nil
 }
+
+func (n *Network) Delete(ctx context.Context, c *client.OpenStack, id string) error {
+	netClient, err := c.Network()
+	if err != nil {
+		return err
+	}
+	return networks.Delete(ctx, netClient, id).ExtractErr()
+}

@@ -29,8 +29,7 @@ func NewCommandBar(app *App) *CommandBar {
 	cb.frame = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(cb.input, 1, 0, true)
 	cb.frame.SetBorder(true).
-		SetBorderColor(tcell.ColorDarkOrange).
-		SetBorderAttributes(tcell.AttrBold).
+		SetBorderColor(ColorSelected).
 		SetBorderPadding(0, 0, 1, 1)
 
 	names := resource.AllNames()
@@ -54,6 +53,10 @@ func NewCommandBar(app *App) *CommandBar {
 		switch key {
 		case tcell.KeyEnter:
 			text := strings.TrimSpace(cb.input.GetText())
+			if text == "q" || text == "quit" {
+				app.tviewApp.Stop()
+				return
+			}
 			if text != "" {
 				app.SwitchResource(text)
 			}

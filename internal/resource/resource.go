@@ -19,6 +19,7 @@ type Resource interface {
 	IDColumn() int // which column index is the identifier for Show()
 	List(ctx context.Context, c *client.OpenStack) ([][]string, error)
 	Show(ctx context.Context, c *client.OpenStack, id string) ([][2]string, error)
+	Delete(ctx context.Context, c *client.OpenStack, id string) error
 }
 
 var (

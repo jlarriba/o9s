@@ -104,3 +104,11 @@ func (p *Port) Show(ctx context.Context, c *client.OpenStack, id string) ([][2]s
 		{"Description", port.Description},
 	}, nil
 }
+
+func (p *Port) Delete(ctx context.Context, c *client.OpenStack, id string) error {
+	netClient, err := c.Network()
+	if err != nil {
+		return err
+	}
+	return ports.Delete(ctx, netClient, id).ExtractErr()
+}

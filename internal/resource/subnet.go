@@ -97,3 +97,11 @@ func (s *Subnet) Show(ctx context.Context, c *client.OpenStack, id string) ([][2
 		{"Description", sub.Description},
 	}, nil
 }
+
+func (s *Subnet) Delete(ctx context.Context, c *client.OpenStack, id string) error {
+	netClient, err := c.Network()
+	if err != nil {
+		return err
+	}
+	return subnets.Delete(ctx, netClient, id).ExtractErr()
+}

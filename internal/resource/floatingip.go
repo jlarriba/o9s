@@ -91,3 +91,11 @@ func (f *FloatingIP) Show(ctx context.Context, c *client.OpenStack, id string) (
 		{"Updated At", fip.UpdatedAt.String()},
 	}, nil
 }
+
+func (f *FloatingIP) Delete(ctx context.Context, c *client.OpenStack, id string) error {
+	netClient, err := c.Network()
+	if err != nil {
+		return err
+	}
+	return floatingips.Delete(ctx, netClient, id).ExtractErr()
+}

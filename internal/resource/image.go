@@ -89,6 +89,14 @@ func (i *Image) Show(ctx context.Context, c *client.OpenStack, id string) ([][2]
 	}, nil
 }
 
+func (i *Image) Delete(ctx context.Context, c *client.OpenStack, id string) error {
+	imgClient, err := c.ImageService()
+	if err != nil {
+		return err
+	}
+	return images.Delete(ctx, imgClient, id).ExtractErr()
+}
+
 func formatBytes(b int64) string {
 	if b == 0 {
 		return "0"

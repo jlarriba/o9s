@@ -81,3 +81,11 @@ func (p *Project) Show(ctx context.Context, c *client.OpenStack, id string) ([][
 		{"Tags", strings.Join(proj.Tags, ", ")},
 	}, nil
 }
+
+func (p *Project) Delete(ctx context.Context, c *client.OpenStack, id string) error {
+	idClient, err := c.Identity()
+	if err != nil {
+		return err
+	}
+	return projects.Delete(ctx, idClient, id).ExtractErr()
+}

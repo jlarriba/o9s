@@ -73,3 +73,11 @@ func (k *Keypair) Show(ctx context.Context, c *client.OpenStack, id string) ([][
 		{"User ID", kp.UserID},
 	}, nil
 }
+
+func (k *Keypair) Delete(ctx context.Context, c *client.OpenStack, id string) error {
+	computeClient, err := c.Compute()
+	if err != nil {
+		return err
+	}
+	return keypairs.Delete(ctx, computeClient, id, keypairs.DeleteOpts{}).ExtractErr()
+}

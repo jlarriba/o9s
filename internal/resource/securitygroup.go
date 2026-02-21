@@ -92,3 +92,11 @@ func (s *SecurityGroup) Show(ctx context.Context, c *client.OpenStack, id string
 		{"Rules", strings.Join(rules, "\n")},
 	}, nil
 }
+
+func (s *SecurityGroup) Delete(ctx context.Context, c *client.OpenStack, id string) error {
+	netClient, err := c.Network()
+	if err != nil {
+		return err
+	}
+	return groups.Delete(ctx, netClient, id).ExtractErr()
+}

@@ -104,6 +104,14 @@ func (s *Server) Show(ctx context.Context, c *client.OpenStack, id string) ([][2
 	}, nil
 }
 
+func (s *Server) Delete(ctx context.Context, c *client.OpenStack, id string) error {
+	computeClient, err := c.Compute()
+	if err != nil {
+		return err
+	}
+	return servers.Delete(ctx, computeClient, id).ExtractErr()
+}
+
 func buildImageNameMap(ctx context.Context, c *client.OpenStack) map[string]string {
 	m := map[string]string{}
 	imgClient, err := c.ImageService()

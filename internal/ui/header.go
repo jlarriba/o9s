@@ -16,11 +16,19 @@ var shortcuts = [][2]string{
 	{"F5", "router"},
 }
 
+var actions = [][2]string{
+	{"Ctrl-d", "delete"},
+	{"j", "start VM"},
+	{"l", "stop VM"},
+	{"r", "reload"},
+}
+
 type Header struct {
 	layout   *tview.Flex
 	info     *tview.TextView
 	projects *tview.TextView
 	quicknav *tview.TextView
+	actionsv *tview.TextView
 	logo     *tview.TextView
 }
 
@@ -29,6 +37,7 @@ func NewHeader() *Header {
 		info:     tview.NewTextView().SetDynamicColors(true),
 		projects: tview.NewTextView().SetDynamicColors(true).SetScrollable(true),
 		quicknav: tview.NewTextView().SetDynamicColors(true),
+		actionsv: tview.NewTextView().SetDynamicColors(true),
 		logo:     tview.NewTextView().SetDynamicColors(true).SetTextAlign(tview.AlignRight),
 	}
 
@@ -36,10 +45,11 @@ func NewHeader() *Header {
 		AddItem(h.info, 0, 1, false).
 		AddItem(h.projects, 0, 1, false).
 		AddItem(h.quicknav, 0, 1, false).
+		AddItem(h.actionsv, 0, 1, false).
 		AddItem(h.logo, 18, 0, false)
 
 	// Set logo
-	h.logo.SetText(fmt.Sprintf("[steelblue]%s", Logo))
+	h.logo.SetText(fmt.Sprintf("[indianred]%s", Logo))
 
 	return h
 }
@@ -75,10 +85,15 @@ func (h *Header) Update(c *client.OpenStack, currentResource string, quotas clie
 	h.quicknav.Clear()
 	for _, s := range shortcuts {
 		if s[1] == currentResource {
-			fmt.Fprintf(h.quicknav, "[steelblue::b]%s[white::b] %s[-::-]\n", s[0], s[1])
+			fmt.Fprintf(h.quicknav, "[indianred::b]<%s>[white::b] %s[-::-]\n", s[0], s[1])
 		} else {
-			fmt.Fprintf(h.quicknav, "[dimgray]%s [gray]%s[-]\n", s[0], s[1])
+			fmt.Fprintf(h.quicknav, "[dimgray]<%s> [gray]%s[-]\n", s[0], s[1])
 		}
+	}
+
+	h.actionsv.Clear()
+	for _, a := range actions {
+		fmt.Fprintf(h.actionsv, "[darkorange::b]<%s> [gray]%s[-::-]\n", a[0], a[1])
 	}
 }
 

@@ -58,13 +58,13 @@ func (t *Table) Widget() tview.Primitive {
 
 func (t *Table) setTitle(kind string, count int) {
 	title := strings.ToUpper(kind[:1]) + kind[1:] + "s"
-	t.frame.SetTitle(fmt.Sprintf(" [deepskyblue::b]%s [white::b][%d][-::-] ", title, count))
+	t.frame.SetTitle(fmt.Sprintf(" [tomato::b]%s [white::b][%d][-::-] ", title, count))
 }
 
 func (t *Table) Load(ctx context.Context, res resource.Resource, c *client.OpenStack) {
 	t.resource = res
 	t.table.Clear()
-	t.frame.SetTitle(fmt.Sprintf(" [steelblue]%s [dimgray][loading...] ", strings.ToUpper(res.Kind()[:1])+res.Kind()[1:]+"s"))
+	t.frame.SetTitle(fmt.Sprintf(" [indianred]%s [dimgray][loading...] ", strings.ToUpper(res.Kind()[:1])+res.Kind()[1:]+"s"))
 
 	// Set header
 	cols := res.Columns()

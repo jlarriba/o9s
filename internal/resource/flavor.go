@@ -83,3 +83,11 @@ func (f *Flavor) Show(ctx context.Context, c *client.OpenStack, id string) ([][2
 		{"Description", flv.Description},
 	}, nil
 }
+
+func (f *Flavor) Delete(ctx context.Context, c *client.OpenStack, id string) error {
+	computeClient, err := c.Compute()
+	if err != nil {
+		return err
+	}
+	return flavors.Delete(ctx, computeClient, id).ExtractErr()
+}

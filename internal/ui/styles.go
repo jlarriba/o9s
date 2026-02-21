@@ -1,13 +1,26 @@
 package ui
 
-import "github.com/gdamore/tcell/v2"
+import (
+	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
+)
+
+func init() {
+	// Use single-line borders even when focused (default focus uses double lines)
+	tview.Borders.HorizontalFocus = tview.Borders.Horizontal
+	tview.Borders.VerticalFocus = tview.Borders.Vertical
+	tview.Borders.TopLeftFocus = tview.Borders.TopLeft
+	tview.Borders.TopRightFocus = tview.Borders.TopRight
+	tview.Borders.BottomLeftFocus = tview.Borders.BottomLeft
+	tview.Borders.BottomRightFocus = tview.Borders.BottomRight
+}
 
 var (
-	ColorTitle      = tcell.ColorSteelBlue
+	ColorTitle      = tcell.ColorIndianRed
 	ColorHeader     = tcell.ColorWhite
-	ColorSelected   = tcell.ColorDodgerBlue
+	ColorSelected   = tcell.NewRGBColor(100, 30, 30)
 	ColorBorder     = tcell.ColorDimGray
-	ColorLogo       = tcell.ColorSteelBlue
+	ColorLogo       = tcell.ColorIndianRed
 	ColorLabel      = tcell.ColorGray
 	ColorValue      = tcell.ColorWhite
 	ColorCommand    = tcell.ColorYellow

@@ -102,3 +102,11 @@ func (v *Volume) Show(ctx context.Context, c *client.OpenStack, id string) ([][2
 		{"Metadata", fmt.Sprintf("%v", vol.Metadata)},
 	}, nil
 }
+
+func (v *Volume) Delete(ctx context.Context, c *client.OpenStack, id string) error {
+	bsClient, err := c.BlockStorage()
+	if err != nil {
+		return err
+	}
+	return volumes.Delete(ctx, bsClient, id, volumes.DeleteOpts{}).ExtractErr()
+}

@@ -38,6 +38,6 @@ func (d *Detail) Show(kind string, data [][2]string) {
 	}
 
 	for _, kv := range data {
-		fmt.Fprintf(d.view, "[steelblue::b]%-*s[white::-]  %s\n", maxKey+1, kv[0]+":", kv[1])
+		fmt.Fprintf(d.view, "[indianred::b]%-*s[white::-]  %s\n", maxKey+1, kv[0]+":", kv[1])
 	}
 }

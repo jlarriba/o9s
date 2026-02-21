@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
 	"github.com/jlarriba/o9s/internal/client"
 	"github.com/jlarriba/o9s/internal/resource"
 	"github.com/rivo/tview"
@@ -101,6 +102,9 @@ func (a *App) setupKeys() {
 		case tcell.KeyF5:
 			a.SwitchResource("router")
 			return nil
+		case tcell.KeyCtrlD:
+			a.deleteSelected()
+			return nil
 		case tcell.KeyCtrlC:
 			a.tviewApp.Stop()
 			return nil
@@ -119,6 +123,12 @@ func (a *App) setupKeys() {
 				return nil
 			case 'r':
 				a.Reload()
+				return nil
+			case 'j':
+				a.startServer()
+				return nil
+			case 'l':
+				a.stopServer()
 				return nil
 			case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
 				idx := int(event.Rune() - '0')
@@ -214,4 +224,122 @@ func (a *App) showError(msg string) {
 		SetAttributes(tcell.AttrBold))
 	a.table.table.SetCell(1, 0, tview.NewTableCell(msg).
 		SetTextColor(ColorError))
+}
+
+func (a *App) getSelectedID() string {
+	if a.currentRes == nil || a.table.rows == nil {
+		return ""
+	}
+	row, _ := a.table.table.GetSelection()
+	if row < 1 || row-1 >= len(a.table.rows) {
+		return ""
+	}
+	idCol := a.currentRes.IDColumn()
+	if idCol >= len(a.table.rows[row-1]) {
+		return ""
+	}
+	return a.table.rows[row-1][idCol]
+}
+
+func (a *App) getSelectedName() string {
+	if a.table.rows == nil {
+		return ""
+	}
+	row, _ := a.table.table.GetSelection()
+	if row < 1 || row-1 >= len(a.table.rows) {
+		return ""
+	}
+	return a.table.rows[row-1][0]
+}
+
+func (a *App) confirm(message string, onYes func()) {
+	modal := tview.NewModal().
+		SetText(message).
+		AddButtons([]string{"Yes", "No"}).
+		SetDoneFunc(func(idx int, label string) {
+			a.pages.RemovePage("confirm")
+			if label == "Yes" {
+				onYes()
+			}
+			a.tviewApp.SetFocus(a.table.table)
+		})
+	modal.SetBackgroundColor(tcell.ColorDarkRed)
+	a.pages.AddPage("confirm", modal, true, true)
+}
+
+func (a *App) deleteSelected() {
+	id := a.getSelectedID()
+	name := a.getSelectedName()
+	if id == "" {
+		return
+	}
+	kind := a.currentRes.Kind()
+	a.confirm(fmt.Sprintf("Delete %s %q?", kind, name), func() {
+		go func() {
+			err := a.currentRes.Delete(context.Background(), a.osClient, id)
+			a.tviewApp.QueueUpdateDraw(func() {
+				if err != nil {
+					a.showError(fmt.Sprintf("delete failed: %s", err))
+					return
+				}
+				a.Reload()
+			})
+		}()
+	})
+}
+
+func (a *App) startServer() {
+	if a.currentRes == nil || a.currentRes.Kind() != "server" {
+		return
+	}
+	id := a.getSelectedID()
+	name := a.getSelectedName()
+	if id == "" {
+		return
+	}
+	a.confirm(fmt.Sprintf("Start server %q?", name), func() {
+		go func() {
+			computeClient, err := a.osClient.Compute()
+			if err != nil {
+				a.tviewApp.QueueUpdateDraw(func() { a.showError(err.Error()) })
+				return
+			}
+			err = servers.Start(context.Background(), computeClient, id).ExtractErr()
+			a.tviewApp.QueueUpdateDraw(func() {
+				if err != nil {
+					a.showError(fmt.Sprintf("start failed: %s", err))
+					return
+				}
+				a.Reload()
+			})
+		}()
+	})
+}
+
+func (a *App) stopServer() {
+	if a.currentRes == nil || a.currentRes.Kind() != "server" {
+		return
+	}
+	id := a.getSelectedID()
+	name := a.getSelectedName()
+	if id == "" {
+		return
+	}
+	a.confirm(fmt.Sprintf("Stop server %q?", name), func() {
+		go func() {
+			computeClient, err := a.osClient.Compute()
+			if err != nil {
+				a.tviewApp.QueueUpdateDraw(func() { a.showError(err.Error()) })
+				return
+			}
+			err = servers.Stop(context.Background(), computeClient, id).ExtractErr()
+			a.tviewApp.QueueUpdateDraw(func() {
+				if err != nil {
+					a.showError(fmt.Sprintf("stop failed: %s", err))
+					return
+				}
+				a.Reload()
+			})
+		}()
+	})
 }

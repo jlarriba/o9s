@@ -82,3 +82,11 @@ func (r *Router) Show(ctx context.Context, c *client.OpenStack, id string) ([][2
 		{"Description", rtr.Description},
 	}, nil
 }
+
+func (r *Router) Delete(ctx context.Context, c *client.OpenStack, id string) error {
+	netClient, err := c.Network()
+	if err != nil {
+		return err
+	}
+	return routers.Delete(ctx, netClient, id).ExtractErr()
+}

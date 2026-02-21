@@ -49,7 +49,9 @@ func New(ctx context.Context, cloudName string) (*OpenStack, error) {
 	}
 	c.detectScopedProject()
 	if err := c.loadProjects(ctx); err != nil {
-		return nil, fmt.Errorf("loading projects: %w", err)
+		// Non-admin users may lack identity:list_projects permission.
+		// Fall back to just the current scoped project.
+		c.Projects = []ProjectInfo{{ID: c.ProjectID, Name: c.ProjectName}}
 	}
 	return c, nil
 }
