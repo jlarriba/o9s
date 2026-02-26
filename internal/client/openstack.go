@@ -40,6 +40,7 @@ type OpenStack struct {
 	blockStorage *gophercloud.ServiceClient
 	imageService *gophercloud.ServiceClient
 	identity     *gophercloud.ServiceClient
+	metric       *gophercloud.ServiceClient
 }
 
 func New(ctx context.Context, cloudName string) (*OpenStack, error) {
@@ -200,13 +201,14 @@ func (c *OpenStack) clearClients() {
 	c.blockStorage = nil
 	c.imageService = nil
 	c.identity = nil
+	c.metric = nil
 }
 
 func (c *OpenStack) Compute() (*gophercloud.ServiceClient, error) {
 	if c.compute != nil {
 		return c.compute, nil
 	}
-	client, err := openstack.NewComputeV2(c.Provider, c.EndpointOpts)
+	client, err := openstack.NewComputeV2(context.Background(), c.Provider, c.EndpointOpts)
 	if err != nil {
 		return nil, fmt.Errorf("creating compute client: %w", err)
 	}
@@ -218,7 +220,7 @@ func (c *OpenStack) Network() (*gophercloud.ServiceClient, error) {
 	if c.network != nil {
 		return c.network, nil
 	}
-	client, err := openstack.NewNetworkV2(c.Provider, c.EndpointOpts)
+	client, err := openstack.NewNetworkV2(context.Background(), c.Provider, c.EndpointOpts)
 	if err != nil {
 		return nil, fmt.Errorf("creating network client: %w", err)
 	}
@@ -230,7 +232,7 @@ func (c *OpenStack) BlockStorage() (*gophercloud.ServiceClient, error) {
 	if c.blockStorage != nil {
 		return c.blockStorage, nil
 	}
-	client, err := openstack.NewBlockStorageV3(c.Provider, c.EndpointOpts)
+	client, err := openstack.NewBlockStorageV3(context.Background(), c.Provider, c.EndpointOpts)
 	if err != nil {
 		return nil, fmt.Errorf("creating block storage client: %w", err)
 	}
@@ -242,7 +244,7 @@ func (c *OpenStack) ImageService() (*gophercloud.ServiceClient, error) {
 	if c.imageService != nil {
 		return c.imageService, nil
 	}
-	client, err := openstack.NewImageV2(c.Provider, c.EndpointOpts)
+	client, err := openstack.NewImageV2(context.Background(), c.Provider, c.EndpointOpts)
 	if err != nil {
 		return nil, fmt.Errorf("creating image client: %w", err)
 	}
@@ -254,12 +256,24 @@ func (c *OpenStack) Identity() (*gophercloud.ServiceClient, error) {
 	if c.identity != nil {
 		return c.identity, nil
 	}
-	client, err := openstack.NewIdentityV3(c.Provider, c.EndpointOpts)
+	client, err := openstack.NewIdentityV3(context.Background(), c.Provider, c.EndpointOpts)
 	if err != nil {
 		return nil, fmt.Errorf("creating identity client: %w", err)
 	}
 	c.identity = client
 	return c.identity, nil
+}
+
+func (c *OpenStack) Metric() (*gophercloud.ServiceClient, error) {
+	if c.metric != nil {
+		return c.metric, nil
+	}
+	client, err := openstack.NewMetricV1(context.Background(), c.Provider, c.EndpointOpts)
+	if err != nil {
+		return nil, fmt.Errorf("creating metric client: %w", err)
+	}
+	c.metric = client
+	return c.metric, nil
 }
 
 type QuotaUsage struct {

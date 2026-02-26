@@ -56,6 +56,76 @@ func (t *Table) Widget() tview.Primitive {
 	return t.frame
 }
 
+// Refresh reloads data in the background without clearing the current view.
+func (t *Table) Refresh(ctx context.Context, res resource.Resource, c *client.OpenStack, onDone func()) {
+	go func() {
+		rows, err := res.List(ctx, c)
+		t.app.tviewApp.QueueUpdateDraw(func() {
+			if err != nil {
+				// On error during background refresh, don't wipe the table
+				if onDone != nil {
+					onDone()
+				}
+				return
+			}
+
+			cols := res.Columns()
+
+			// Preserve current selection
+			selectedRow, _ := t.table.GetSelection()
+
+			t.table.Clear()
+
+			// Re-set header
+			for i, col := range cols {
+				cell := tview.NewTableCell(col.Name).
+					SetTextColor(ColorTitle).
+					SetSelectable(false).
+					SetAttributes(tcell.AttrBold)
+				if col.Width > 0 {
+					cell.SetMaxWidth(col.Width)
+				}
+				cell.SetExpansion(1)
+				t.table.SetCell(0, i, cell)
+			}
+
+			if len(rows) == 0 {
+				t.table.SetCell(1, 0, tview.NewTableCell("No resources found").
+					SetTextColor(ColorLabel))
+				t.rows = nil
+				t.setTitle(res.Kind(), 0)
+			} else {
+				t.rows = rows
+				t.setTitle(res.Kind(), len(rows))
+				for r, row := range rows {
+					for c, val := range row {
+						cell := tview.NewTableCell(val).
+							SetTextColor(tcell.ColorWhite)
+						if cols[c].Name == "STATUS" {
+							cell.SetTextColor(StatusColor(val))
+						}
+						if cols[c].Width > 0 {
+							cell.SetMaxWidth(cols[c].Width)
+						}
+						cell.SetExpansion(1)
+						t.table.SetCell(r+1, c, cell)
+					}
+				}
+				// Restore selection
+				if selectedRow > 0 && selectedRow <= len(rows) {
+					t.table.Select(selectedRow, 0)
+				} else {
+					t.table.Select(1, 0)
+				}
+			}
+
+			if onDone != nil {
+				onDone()
+			}
+		})
+	}()
+}
+
 func (t *Table) setTitle(kind string, count int) {
 	title := strings.ToUpper(kind[:1]) + kind[1:] + "s"
 	t.frame.SetTitle(fmt.Sprintf(" [tomato::b]%s [white::b][%d][-::-] ", title, count))

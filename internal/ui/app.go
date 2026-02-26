@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
@@ -20,9 +21,13 @@ type App struct {
 	commandBar  *CommandBar
 	pages      *tview.Pages
 	layout     *tview.Flex
+	statusBar  *tview.TextView
 	currentRes resource.Resource
 	quotas     client.QuotaInfo
 	showingCmd bool
+	stopTicker chan struct{}
+	detailID      string // ID of the resource currently shown in detail view
+	detailLoading bool   // true while initial detail load is in progress
 }
 
 func NewApp(c *client.OpenStack) *App {
@@ -41,6 +46,8 @@ func NewApp(c *client.OpenStack) *App {
 		AddPage("table", app.table.Widget(), true, true).
 		AddPage("detail", app.detail.Widget(), true, false)
 
+	app.statusBar = tview.NewTextView().SetDynamicColors(true)
+
 	// Header height: max of 8 (4 info + 1 blank + 3 quota bars) or project count, plus 1 for spacing
 	headerHeight := len(c.Projects)
 	if headerHeight > 10 {
@@ -51,11 +58,12 @@ func NewApp(c *client.OpenStack) *App {
 	}
 	headerHeight++ // extra row for spacing
 
-	// Main layout: header, then command bar (hidden), then results box
+	// Main layout: header, command bar (hidden), results box, status bar
 	app.layout = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(app.header.Widget(), headerHeight, 0, false).
 		AddItem(app.commandBar.Widget(), 0, 0, false). // height 0 = hidden
-		AddItem(app.pages, 0, 1, true)
+		AddItem(app.pages, 0, 1, true).
+		AddItem(app.statusBar, 1, 0, false)
 
 	app.setupKeys()
 
@@ -70,7 +78,39 @@ func (a *App) Run() error {
 			a.SwitchResource("server")
 		})
 	}()
+	// Start auto-refresh ticker
+	a.startAutoRefresh()
 	return a.tviewApp.Run()
+}
+
+func (a *App) startAutoRefresh() {
+	a.stopTicker = make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if a.showingCmd {
+					continue
+				}
+				name, _ := a.pages.GetFrontPage()
+				switch name {
+				case "table":
+					a.tviewApp.QueueUpdateDraw(func() {
+						a.BackgroundRefresh()
+					})
+				case "detail":
+					a.tviewApp.QueueUpdateDraw(func() {
+						a.statusBar.SetText("[dimgray] Refreshing...")
+						a.refreshDetail()
+					})
+				}
+			case <-a.stopTicker:
+				return
+			}
+		}
+	}()
 }
 
 func (a *App) setupKeys() {
@@ -83,6 +123,7 @@ func (a *App) setupKeys() {
 		switch event.Key() {
 		case tcell.KeyEscape:
 			if name, _ := a.pages.GetFrontPage(); name == "detail" {
+				a.detailID = ""
 				a.pages.SwitchToPage("table")
 				a.tviewApp.SetFocus(a.table.table)
 				return nil
@@ -115,6 +156,7 @@ func (a *App) setupKeys() {
 				return nil
 			case 'q':
 				if name, _ := a.pages.GetFrontPage(); name == "detail" {
+					a.detailID = ""
 					a.pages.SwitchToPage("table")
 					a.tviewApp.SetFocus(a.table.table)
 					return nil
@@ -164,13 +206,27 @@ func (a *App) Reload() {
 	}
 }
 
+func (a *App) BackgroundRefresh() {
+	if a.currentRes != nil {
+		a.statusBar.SetText("[dimgray] Refreshing...")
+		a.table.Refresh(context.Background(), a.currentRes, a.osClient, func() {
+			a.refreshQuotas()
+			a.header.Update(a.osClient, a.currentRes.Kind(), a.quotas)
+			a.statusBar.SetText("")
+		})
+	}
+}
+
 func (a *App) ShowDetail(id string) {
 	if a.currentRes == nil {
 		return
 	}
+	a.detailID = id
+	a.detailLoading = true
 	go func() {
 		data, err := a.currentRes.Show(context.Background(), a.osClient, id)
 		a.tviewApp.QueueUpdateDraw(func() {
+			a.detailLoading = false
 			if err != nil {
 				a.detail.view.Clear()
 				a.detail.view.SetTitle(" Error ")
@@ -180,6 +236,22 @@ func (a *App) ShowDetail(id string) {
 			}
 			a.pages.SwitchToPage("detail")
 			a.tviewApp.SetFocus(a.detail.view)
+		})
+	}()
+}
+
+func (a *App) refreshDetail() {
+	if a.currentRes == nil || a.detailID == "" || a.detailLoading {
+		return
+	}
+	id := a.detailID
+	go func() {
+		data, err := a.currentRes.Show(context.Background(), a.osClient, id)
+		a.tviewApp.QueueUpdateDraw(func() {
+			if err == nil && a.detailID == id {
+				a.detail.Show(a.currentRes.Kind(), data)
+			}
+			a.statusBar.SetText("")
 		})
 	}()
 }
