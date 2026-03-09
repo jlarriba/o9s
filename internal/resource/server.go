@@ -154,7 +154,9 @@ func fetchServerMetrics(ctx context.Context, c *client.OpenStack) map[string]ser
 	}
 
 	// Query all metrics we need in parallel-ish (sequential but fast)
-	cpuData := queryMetric(ctx, metricClient, "ceilometer_cpu")
+	// Use rate() for ceilometer_cpu since it's a cumulative counter (total ns since boot).
+	// rate() returns per-second CPU nanoseconds over the given window.
+	cpuRateData := queryMetric(ctx, metricClient, "rate(ceilometer_cpu[5m])")
 	vcpusData := queryMetric(ctx, metricClient, "ceilometer_vcpus")
 	memUsageData := queryMetric(ctx, metricClient, "ceilometer_memory_usage")
 	memTotalData := queryMetric(ctx, metricClient, "ceilometer_memory")
@@ -162,7 +164,7 @@ func fetchServerMetrics(ctx context.Context, c *client.OpenStack) map[string]ser
 	diskTotalData := queryMetric(ctx, metricClient, "ceilometer_disk_root_size")
 
 	// Build per-VM maps: resource label → value
-	cpuByVM := metricByResource(cpuData)
+	cpuRateByVM := metricByResource(cpuRateData)
 	vcpusByVM := metricByResource(vcpusData)
 	memUsageByVM := metricByResource(memUsageData)
 	memTotalByVM := metricByResource(memTotalData)
@@ -181,12 +183,11 @@ func fetchServerMetrics(ctx context.Context, c *client.OpenStack) map[string]ser
 	for id := range allIDs {
 		m := serverMetrics{cpuPct: "-", memPct: "-", diskPct: "-"}
 
-		// CPU%: cpu is in nanoseconds cumulative; we show vcpus as a simple indicator
-		// For instant usage, we use cpu_ns / (vcpus * 1e9) as a rough instant snapshot
-		if cpuNs, ok := cpuByVM[id]; ok {
+		// CPU%: rate() returns per-second CPU nanoseconds.
+		// Divide by 1e9 to get CPU-seconds/s per vCPU, then * 100 for percentage.
+		if cpuRate, ok := cpuRateByVM[id]; ok {
 			if vcpus, ok := vcpusByVM[id]; ok && vcpus > 0 {
-				// cpu is cumulative ns; show as rough % of 1 polling interval (~300s)
-				pct := (cpuNs / (vcpus * 300 * 1e9)) * 100
+				pct := (cpuRate / (vcpus * 1e9)) * 100
 				if pct > 100 {
 					pct = 100
 				}
