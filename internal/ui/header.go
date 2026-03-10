@@ -21,6 +21,7 @@ var actions = [][2]string{
 	{"m", "start VM"},
 	{"n", "stop VM"},
 	{"b", "reboot VM"},
+	{"l", "logs VM"},
 	{"r", "reload"},
 }
 

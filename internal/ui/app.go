@@ -172,6 +172,9 @@ func (a *App) setupKeys() {
 			case 'n':
 				a.stopServer()
 				return nil
+			case 'l':
+				a.showServerLogs()
+				return nil
 			case 'b':
 				a.rebootServer()
 				return nil
@@ -451,4 +454,35 @@ func (a *App) rebootServer() {
 			})
 		}()
 	})
+}
+
+func (a *App) showServerLogs() {
+	if a.currentRes == nil || a.currentRes.Kind() != "server" {
+		return
+	}
+	id := a.getSelectedID()
+	name := a.getSelectedName()
+	if id == "" {
+		return
+	}
+	go func() {
+		computeClient, err := a.osClient.Compute()
+		if err != nil {
+			a.tviewApp.QueueUpdateDraw(func() { a.showError(err.Error()) })
+			return
+		}
+		output, err := servers.ShowConsoleOutput(context.Background(), computeClient, id, servers.ShowConsoleOutputOpts{}).Extract()
+		a.tviewApp.QueueUpdateDraw(func() {
+			if err != nil {
+				a.showError(fmt.Sprintf("logs failed: %s", err))
+				return
+			}
+			a.detail.view.Clear()
+			a.detail.view.SetTitle(fmt.Sprintf(" logs: %s ", name))
+			fmt.Fprint(a.detail.view, output)
+			a.detail.view.ScrollToEnd()
+			a.pages.SwitchToPage("detail")
+			a.tviewApp.SetFocus(a.detail.view)
+		})
+	}()
 }
