@@ -11,7 +11,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var cloudName string
+var (
+	cloudName string
+	insecure  bool
+)
 
 var rootCmd = &cobra.Command{
 	Use:   "o9s",
@@ -19,7 +22,7 @@ var rootCmd = &cobra.Command{
 	Long:  "A terminal UI for OpenStack, inspired by k9s.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
-		c, err := client.New(ctx, cloudName)
+		c, err := client.New(ctx, cloudName, insecure)
 		if err != nil {
 			return fmt.Errorf("auth failed: %w", err)
 		}
@@ -31,6 +34,7 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	rootCmd.PersistentFlags().StringVar(&cloudName, "cloud", os.Getenv("OS_CLOUD"), "OpenStack cloud name from clouds.yaml")
+	rootCmd.PersistentFlags().BoolVar(&insecure, "insecure", false, "Skip TLS certificate verification")
 }
 
 func Execute() {

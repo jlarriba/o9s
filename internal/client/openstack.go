@@ -34,6 +34,7 @@ type OpenStack struct {
 	// Stored for re-auth on project switch
 	origAuthOpts gophercloud.AuthOptions
 	tlsConfig    *tls.Config
+	insecure     bool
 
 	compute      *gophercloud.ServiceClient
 	network      *gophercloud.ServiceClient
@@ -45,8 +46,8 @@ type OpenStack struct {
 	dns          *gophercloud.ServiceClient
 }
 
-func New(ctx context.Context, cloudName string) (*OpenStack, error) {
-	c := &OpenStack{CloudName: cloudName}
+func New(ctx context.Context, cloudName string, insecure bool) (*OpenStack, error) {
+	c := &OpenStack{CloudName: cloudName, insecure: insecure}
 	if err := c.authenticate(ctx); err != nil {
 		return nil, err
 	}
@@ -76,6 +77,12 @@ func (c *OpenStack) authFromClouds(ctx context.Context) error {
 	authOpts.AllowReauth = true
 	c.EndpointOpts = endpointOpts
 	c.origAuthOpts = authOpts
+	if c.insecure {
+		if tlsConfig == nil {
+			tlsConfig = &tls.Config{}
+		}
+		tlsConfig.InsecureSkipVerify = true
+	}
 	c.tlsConfig = tlsConfig
 
 	provider, err := config.NewProviderClient(ctx, authOpts, config.WithTLSConfig(tlsConfig))
@@ -113,7 +120,13 @@ func (c *OpenStack) authFromEnv(ctx context.Context) error {
 
 	c.origAuthOpts = authOpts
 
-	provider, err := openstack.AuthenticatedClient(ctx, authOpts)
+	var provider *gophercloud.ProviderClient
+	if c.insecure {
+		c.tlsConfig = &tls.Config{InsecureSkipVerify: true}
+		provider, err = config.NewProviderClient(ctx, authOpts, config.WithTLSConfig(c.tlsConfig))
+	} else {
+		provider, err = openstack.AuthenticatedClient(ctx, authOpts)
+	}
 	if err != nil {
 		return fmt.Errorf("authenticating from env: %w", err)
 	}

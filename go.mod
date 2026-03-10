@@ -22,4 +22,4 @@ require (
 	golang.org/x/text v0.21.0 // indirect
 )
 
-replace github.com/gophercloud/gophercloud/v2 => github.com/jlarriba/gophercloud/v2 v2.0.0-20260223143041-08c8cef569fc
+replace github.com/gophercloud/gophercloud/v2 => github.com/jlarriba/gophercloud/v2 v2.0.0-20260310123406-550b9bc39095
