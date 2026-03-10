@@ -18,8 +18,9 @@ var shortcuts = [][2]string{
 
 var actions = [][2]string{
 	{"Ctrl-d", "delete"},
-	{"j", "start VM"},
-	{"l", "stop VM"},
+	{"m", "start VM"},
+	{"n", "stop VM"},
+	{"b", "reboot VM"},
 	{"r", "reload"},
 }
 

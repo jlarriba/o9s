@@ -41,6 +41,8 @@ type OpenStack struct {
 	imageService *gophercloud.ServiceClient
 	identity     *gophercloud.ServiceClient
 	metric       *gophercloud.ServiceClient
+	loadBalancer *gophercloud.ServiceClient
+	dns          *gophercloud.ServiceClient
 }
 
 func New(ctx context.Context, cloudName string) (*OpenStack, error) {
@@ -202,6 +204,8 @@ func (c *OpenStack) clearClients() {
 	c.imageService = nil
 	c.identity = nil
 	c.metric = nil
+	c.loadBalancer = nil
+	c.dns = nil
 }
 
 func (c *OpenStack) Compute() (*gophercloud.ServiceClient, error) {
@@ -262,6 +266,30 @@ func (c *OpenStack) Identity() (*gophercloud.ServiceClient, error) {
 	}
 	c.identity = client
 	return c.identity, nil
+}
+
+func (c *OpenStack) LoadBalancer() (*gophercloud.ServiceClient, error) {
+	if c.loadBalancer != nil {
+		return c.loadBalancer, nil
+	}
+	client, err := openstack.NewLoadBalancerV2(context.Background(), c.Provider, c.EndpointOpts)
+	if err != nil {
+		return nil, fmt.Errorf("creating load balancer client: %w", err)
+	}
+	c.loadBalancer = client
+	return c.loadBalancer, nil
+}
+
+func (c *OpenStack) DNS() (*gophercloud.ServiceClient, error) {
+	if c.dns != nil {
+		return c.dns, nil
+	}
+	client, err := openstack.NewDNSV2(context.Background(), c.Provider, c.EndpointOpts)
+	if err != nil {
+		return nil, fmt.Errorf("creating dns client: %w", err)
+	}
+	c.dns = client
+	return c.dns, nil
 }
 
 func (c *OpenStack) Metric() (*gophercloud.ServiceClient, error) {

@@ -166,12 +166,19 @@ func (a *App) setupKeys() {
 			case 'r':
 				a.Reload()
 				return nil
-			case 'j':
+			case 'm':
 				a.startServer()
 				return nil
-			case 'l':
+			case 'n':
 				a.stopServer()
 				return nil
+			case 'b':
+				a.rebootServer()
+				return nil
+			case 'j':
+				return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
+			case 'k':
+				return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
 			case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
 				idx := int(event.Rune() - '0')
 				a.switchProjectByIndex(idx)
@@ -408,6 +415,36 @@ func (a *App) stopServer() {
 			a.tviewApp.QueueUpdateDraw(func() {
 				if err != nil {
 					a.showError(fmt.Sprintf("stop failed: %s", err))
+					return
+				}
+				a.Reload()
+			})
+		}()
+	})
+}
+
+func (a *App) rebootServer() {
+	if a.currentRes == nil || a.currentRes.Kind() != "server" {
+		return
+	}
+	id := a.getSelectedID()
+	name := a.getSelectedName()
+	if id == "" {
+		return
+	}
+	a.confirm(fmt.Sprintf("Reboot server %q?", name), func() {
+		go func() {
+			computeClient, err := a.osClient.Compute()
+			if err != nil {
+				a.tviewApp.QueueUpdateDraw(func() { a.showError(err.Error()) })
+				return
+			}
+			err = servers.Reboot(context.Background(), computeClient, id, servers.RebootOpts{
+				Type: servers.SoftReboot,
+			}).ExtractErr()
+			a.tviewApp.QueueUpdateDraw(func() {
+				if err != nil {
+					a.showError(fmt.Sprintf("reboot failed: %s", err))
 					return
 				}
 				a.Reload()
