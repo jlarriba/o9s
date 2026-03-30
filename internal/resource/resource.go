@@ -22,6 +22,19 @@ type Resource interface {
 	Delete(ctx context.Context, c *client.OpenStack, id string) error
 }
 
+// RelatedResource describes a navigable link from one resource to another.
+type RelatedResource struct {
+	Kind        string // resource kind for Resolve(), e.g. "volume"
+	ID          string // the ID to pass to Show()
+	DisplayName string // human-readable label for the UI
+}
+
+// Relatable is an optional interface. Resources that expose navigable
+// related items implement this in addition to Resource.
+type Relatable interface {
+	Related(ctx context.Context, c *client.OpenStack, id string) ([]RelatedResource, error)
+}
+
 var (
 	registry = map[string]Resource{}
 	aliases  = map[string]string{}

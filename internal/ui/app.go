@@ -12,6 +12,11 @@ import (
 	"github.com/rivo/tview"
 )
 
+type navEntry struct {
+	res resource.Resource
+	id  string
+}
+
 type App struct {
 	tviewApp    *tview.Application
 	osClient    *client.OpenStack
@@ -28,6 +33,7 @@ type App struct {
 	stopTicker chan struct{}
 	detailID      string // ID of the resource currently shown in detail view
 	detailLoading bool   // true while initial detail load is in progress
+	navStack      []navEntry // navigation history for detail drill-down
 }
 
 func NewApp(c *client.OpenStack) *App {
@@ -39,6 +45,9 @@ func NewApp(c *client.OpenStack) *App {
 	app.header = NewHeader()
 	app.table = NewTable(app)
 	app.detail = NewDetail()
+	app.detail.SetOnRelatedSelect(func(rel resource.RelatedResource) {
+		app.NavigateToRelated(rel)
+	})
 	app.commandBar = NewCommandBar(app)
 
 	// Pages for switching between table and detail
@@ -123,9 +132,28 @@ func (a *App) setupKeys() {
 		switch event.Key() {
 		case tcell.KeyEscape:
 			if name, _ := a.pages.GetFrontPage(); name == "detail" {
-				a.detailID = ""
-				a.pages.SwitchToPage("table")
-				a.tviewApp.SetFocus(a.table.table)
+				if len(a.navStack) > 0 {
+					prev := a.navStack[len(a.navStack)-1]
+					a.navStack = a.navStack[:len(a.navStack)-1]
+					a.currentRes = prev.res
+					a.ShowDetail(prev.id)
+				} else {
+					a.detailID = ""
+					a.pages.SwitchToPage("table")
+					a.tviewApp.SetFocus(a.table.table)
+				}
+				return nil
+			}
+		case tcell.KeyTab:
+			if name, _ := a.pages.GetFrontPage(); name == "detail" {
+				text, rel := a.detail.FocusableWidgets()
+				if rel != nil {
+					if a.tviewApp.GetFocus() == text {
+						a.tviewApp.SetFocus(rel)
+					} else {
+						a.tviewApp.SetFocus(text)
+					}
+				}
 				return nil
 			}
 		case tcell.KeyF1:
@@ -156,9 +184,16 @@ func (a *App) setupKeys() {
 				return nil
 			case 'q':
 				if name, _ := a.pages.GetFrontPage(); name == "detail" {
-					a.detailID = ""
-					a.pages.SwitchToPage("table")
-					a.tviewApp.SetFocus(a.table.table)
+					if len(a.navStack) > 0 {
+						prev := a.navStack[len(a.navStack)-1]
+						a.navStack = a.navStack[:len(a.navStack)-1]
+						a.currentRes = prev.res
+						a.ShowDetail(prev.id)
+					} else {
+						a.detailID = ""
+						a.pages.SwitchToPage("table")
+						a.tviewApp.SetFocus(a.table.table)
+					}
 					return nil
 				}
 				a.tviewApp.Stop()
@@ -202,6 +237,7 @@ func (a *App) SwitchResource(name string) {
 		return
 	}
 	a.currentRes = res
+	a.navStack = nil
 	a.refreshQuotas()
 	a.header.Update(a.osClient, res.Kind(), a.quotas)
 	a.pages.SwitchToPage("table")
@@ -236,19 +272,43 @@ func (a *App) ShowDetail(id string) {
 	}
 	a.detailID = id
 	a.detailLoading = true
+	res := a.currentRes
 	go func() {
-		data, err := a.currentRes.Show(context.Background(), a.osClient, id)
+		ctx := context.Background()
+		data, err := res.Show(ctx, a.osClient, id)
+
+		var related []resource.RelatedResource
+		if rel, ok := res.(resource.Relatable); ok && err == nil {
+			related, _ = rel.Related(ctx, a.osClient, id)
+		}
+
 		a.tviewApp.QueueUpdateDraw(func() {
 			a.detailLoading = false
 			if err != nil {
 				a.detail.ShowError(err.Error())
 			} else {
-				a.detail.Show(a.currentRes.Kind(), data)
+				a.detail.Show(res.Kind(), data)
+				a.detail.SetRelated(related)
 			}
 			a.pages.SwitchToPage("detail")
-			a.tviewApp.SetFocus(a.detail.view)
+			if _, rel := a.detail.FocusableWidgets(); rel != nil {
+				a.tviewApp.SetFocus(rel)
+			} else {
+				a.tviewApp.SetFocus(a.detail.view)
+			}
 		})
 	}()
+}
+
+func (a *App) NavigateToRelated(rel resource.RelatedResource) {
+	a.navStack = append(a.navStack, navEntry{res: a.currentRes, id: a.detailID})
+	targetRes, err := resource.Resolve(rel.Kind)
+	if err != nil {
+		a.detail.ShowError(fmt.Sprintf("cannot navigate: %s", err))
+		return
+	}
+	a.currentRes = targetRes
+	a.ShowDetail(rel.ID)
 }
 
 func (a *App) refreshDetail() {
@@ -256,11 +316,20 @@ func (a *App) refreshDetail() {
 		return
 	}
 	id := a.detailID
+	res := a.currentRes
 	go func() {
-		data, err := a.currentRes.Show(context.Background(), a.osClient, id)
+		ctx := context.Background()
+		data, err := res.Show(ctx, a.osClient, id)
+
+		var related []resource.RelatedResource
+		if rel, ok := res.(resource.Relatable); ok && err == nil {
+			related, _ = rel.Related(ctx, a.osClient, id)
+		}
+
 		a.tviewApp.QueueUpdateDraw(func() {
 			if err == nil && a.detailID == id {
-				a.detail.Show(a.currentRes.Kind(), data)
+				a.detail.Show(res.Kind(), data)
+				a.detail.SetRelated(related)
 			}
 			a.statusBar.SetText("")
 		})

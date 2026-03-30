@@ -122,6 +122,81 @@ func (s *Server) Show(ctx context.Context, c *client.OpenStack, id string) ([][2
 	return result, nil
 }
 
+// Related returns navigable related resources for a server.
+func (s *Server) Related(ctx context.Context, c *client.OpenStack, id string) ([]RelatedResource, error) {
+	computeClient, err := c.Compute()
+	if err != nil {
+		return nil, err
+	}
+	srv, err := servers.Get(ctx, computeClient, id).Extract()
+	if err != nil {
+		return nil, err
+	}
+
+	var related []RelatedResource
+
+	// Attached volumes
+	volumeNames := buildVolumeNameMap(ctx, c)
+	for _, vol := range srv.AttachedVolumes {
+		related = append(related, RelatedResource{
+			Kind:        "volume",
+			ID:          vol.ID,
+			DisplayName: ResolveName(vol.ID, volumeNames),
+		})
+	}
+
+	// Security groups
+	sgMap := buildSecurityGroupIDMap(ctx, c)
+	for _, sg := range srv.SecurityGroups {
+		name, _ := sg["name"].(string)
+		sgID, _ := sg["id"].(string)
+		if sgID == "" {
+			sgID = sgMap[name]
+		}
+		if sgID != "" {
+			related = append(related, RelatedResource{
+				Kind:        "securitygroup",
+				ID:          sgID,
+				DisplayName: name,
+			})
+		}
+	}
+
+	// Networks
+	netNameToID := buildNetworkNameToIDMap(ctx, c)
+	for netName := range srv.Addresses {
+		if netID, ok := netNameToID[netName]; ok {
+			related = append(related, RelatedResource{
+				Kind:        "network",
+				ID:          netID,
+				DisplayName: netName,
+			})
+		}
+	}
+
+	// Image
+	if imgID, ok := srv.Image["id"].(string); ok && imgID != "" {
+		imageNames := buildImageNameMap(ctx, c)
+		related = append(related, RelatedResource{
+			Kind:        "image",
+			ID:          imgID,
+			DisplayName: ResolveName(imgID, imageNames),
+		})
+	}
+
+	// Flavor
+	if flvID, ok := srv.Flavor["id"].(string); ok && flvID != "" {
+		flavorNames := buildFlavorNameMap(ctx, c)
+		related = append(related, RelatedResource{
+			Kind:        "flavor",
+			ID:          flvID,
+			DisplayName: ResolveName(flvID, flavorNames),
+		})
+	}
+
+	return related, nil
+}
+
 // Metrics returns all ceilometer metrics for a specific VM as key-value pairs.
 func (s *Server) Metrics(ctx context.Context, c *client.OpenStack, id string) [][2]string {
 	return fetchVMMetrics(ctx, c, id)

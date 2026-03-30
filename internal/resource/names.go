@@ -4,8 +4,10 @@ import (
 	"context"
 	"strings"
 
+	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/layer3/routers"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/security/groups"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/subnets"
 	"github.com/jlarriba/o9s/internal/client"
@@ -88,6 +90,66 @@ func buildSubnetNameMap(ctx context.Context, c *client.OpenStack) map[string]str
 	}
 	for _, s := range allSubnets {
 		m[s.ID] = s.Name
+	}
+	return m
+}
+
+func buildVolumeNameMap(ctx context.Context, c *client.OpenStack) map[string]string {
+	m := map[string]string{}
+	bsClient, err := c.BlockStorage()
+	if err != nil {
+		return m
+	}
+	allPages, err := volumes.List(bsClient, volumes.ListOpts{}).AllPages(ctx)
+	if err != nil {
+		return m
+	}
+	allVolumes, err := volumes.ExtractVolumes(allPages)
+	if err != nil {
+		return m
+	}
+	for _, v := range allVolumes {
+		m[v.ID] = v.Name
+	}
+	return m
+}
+
+func buildNetworkNameToIDMap(ctx context.Context, c *client.OpenStack) map[string]string {
+	m := map[string]string{}
+	netClient, err := c.Network()
+	if err != nil {
+		return m
+	}
+	allPages, err := networks.List(netClient, networks.ListOpts{}).AllPages(ctx)
+	if err != nil {
+		return m
+	}
+	allNets, err := networks.ExtractNetworks(allPages)
+	if err != nil {
+		return m
+	}
+	for _, n := range allNets {
+		m[n.Name] = n.ID
+	}
+	return m
+}
+
+func buildSecurityGroupIDMap(ctx context.Context, c *client.OpenStack) map[string]string {
+	m := map[string]string{}
+	netClient, err := c.Network()
+	if err != nil {
+		return m
+	}
+	allPages, err := groups.List(netClient, groups.ListOpts{}).AllPages(ctx)
+	if err != nil {
+		return m
+	}
+	allGroups, err := groups.ExtractGroups(allPages)
+	if err != nil {
+		return m
+	}
+	for _, g := range allGroups {
+		m[g.Name] = g.ID
 	}
 	return m
 }
