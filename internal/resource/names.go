@@ -6,6 +6,7 @@ import (
 
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/layer3/floatingips"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/layer3/routers"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/security/groups"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
@@ -110,6 +111,26 @@ func buildVolumeNameMap(ctx context.Context, c *client.OpenStack) map[string]str
 	}
 	for _, v := range allVolumes {
 		m[v.ID] = v.Name
+	}
+	return m
+}
+
+func buildFloatingIPAddrToIDMap(ctx context.Context, c *client.OpenStack) map[string]string {
+	m := map[string]string{}
+	netClient, err := c.Network()
+	if err != nil {
+		return m
+	}
+	allPages, err := floatingips.List(netClient, floatingips.ListOpts{}).AllPages(ctx)
+	if err != nil {
+		return m
+	}
+	allFIPs, err := floatingips.ExtractFloatingIPs(allPages)
+	if err != nil {
+		return m
+	}
+	for _, fip := range allFIPs {
+		m[fip.FloatingIP] = fip.ID
 	}
 	return m
 }

@@ -49,7 +49,7 @@ func NewHeader() *Header {
 		AddItem(h.projects, 0, 1, false).
 		AddItem(h.quicknav, 0, 1, false).
 		AddItem(h.actionsv, 0, 1, false).
-		AddItem(h.logo, 18, 0, false)
+		AddItem(h.logo, 48, 0, false)
 
 	// Set logo
 	h.logo.SetText(fmt.Sprintf("[indianred]%s", Logo))

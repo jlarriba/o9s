@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
@@ -98,28 +99,152 @@ func (s *Server) Show(ctx context.Context, c *client.OpenStack, id string) ([][2
 
 	imageNames := buildImageNameMap(ctx, c)
 	flavorNames := buildFlavorNameMap(ctx, c)
+	volumeNames := buildVolumeNameMap(ctx, c)
 
 	result := [][2]string{
 		{"Name", srv.Name},
 		{"ID", srv.ID},
 		{"Status", srv.Status},
+		{"Progress", fmt.Sprintf("%d", srv.Progress)},
 		{"Tenant ID", srv.TenantID},
 		{"User ID", srv.UserID},
 		{"Host ID", srv.HostID},
+		{"Host", srv.Host},
+		{"Hostname", derefStr(srv.Hostname)},
+		{"Hypervisor Hostname", srv.HypervisorHostname},
+		{"Instance Name", srv.InstanceName},
 		{"Flavor", resolveFlavorName(*srv, flavorNames)},
 		{"Image", resolveImageName(*srv, imageNames)},
-		{"IPs", extractIPs(*srv)},
+		{"Addresses", formatAddresses(*srv)},
+		{"Access IPv4", srv.AccessIPv4},
+		{"Access IPv6", srv.AccessIPv6},
+		{"Security Groups", formatSecurityGroups(srv.SecurityGroups)},
+		{"Volumes Attached", formatVolumes(srv.AttachedVolumes, volumeNames)},
 		{"Key Name", srv.KeyName},
+		{"Config Drive", fmt.Sprintf("%v", srv.ConfigDrive)},
+		{"Disk Config", string(srv.DiskConfig)},
+		{"Availability Zone", srv.AvailabilityZone},
+		{"Launched At", formatTime(srv.LaunchedAt)},
+		{"Terminated At", formatTime(srv.TerminatedAt)},
 		{"Created", srv.Created.String()},
 		{"Updated", srv.Updated.String()},
-		{"Availability Zone", srv.AvailabilityZone},
-		{"Power State", fmt.Sprintf("%d", srv.PowerState)},
+		{"Power State", formatPowerState(srv.PowerState)},
 		{"Task State", srv.TaskState},
 		{"VM State", srv.VmState},
-		{"Metadata", fmt.Sprintf("%v", srv.Metadata)},
+		{"Locked", derefBool(srv.Locked)},
+		{"Reservation ID", derefStr(srv.ReservationID)},
+		{"Launch Index", derefInt(srv.LaunchIndex)},
+		{"Root Device Name", derefStr(srv.RootDeviceName)},
+		{"Kernel ID", derefStr(srv.KernelID)},
+		{"Ramdisk ID", derefStr(srv.RAMDiskID)},
+		{"Server Groups", derefStrSlice(srv.ServerGroups)},
+		{"Tags", derefStrSlice(srv.Tags)},
 	}
 
+	// Fault (only if present)
+	if srv.Fault.Message != "" {
+		result = append(result, [2]string{"Fault", fmt.Sprintf("%s (code %d)", srv.Fault.Message, srv.Fault.Code)})
+	}
+
+	result = append(result, [2]string{"Metadata", fmt.Sprintf("%v", srv.Metadata)})
+
 	return result, nil
+}
+
+func derefStr(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
+}
+
+func derefBool(p *bool) string {
+	if p == nil {
+		return ""
+	}
+	return fmt.Sprintf("%v", *p)
+}
+
+func derefInt(p *int) string {
+	if p == nil {
+		return ""
+	}
+	return fmt.Sprintf("%d", *p)
+}
+
+func derefStrSlice(p *[]string) string {
+	if p == nil || len(*p) == 0 {
+		return ""
+	}
+	return strings.Join(*p, ", ")
+}
+
+func formatTime(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.String()
+}
+
+func formatPowerState(ps servers.PowerState) string {
+	switch ps {
+	case 0:
+		return "NOSTATE"
+	case 1:
+		return "Running"
+	case 3:
+		return "Paused"
+	case 4:
+		return "Shutdown"
+	case 6:
+		return "Crashed"
+	case 7:
+		return "Suspended"
+	default:
+		return fmt.Sprintf("%d", ps)
+	}
+}
+
+func formatSecurityGroups(sgs []map[string]any) string {
+	names := make([]string, 0, len(sgs))
+	for _, sg := range sgs {
+		if name, ok := sg["name"].(string); ok {
+			names = append(names, name)
+		}
+	}
+	return strings.Join(names, ", ")
+}
+
+func formatVolumes(vols []servers.AttachedVolume, names map[string]string) string {
+	parts := make([]string, 0, len(vols))
+	for _, v := range vols {
+		parts = append(parts, ResolveName(v.ID, names))
+	}
+	return strings.Join(parts, ", ")
+}
+
+func formatAddresses(srv servers.Server) string {
+	var parts []string
+	for netName, addrs := range srv.Addresses {
+		addrList, ok := addrs.([]interface{})
+		if !ok {
+			continue
+		}
+		var ips []string
+		for _, a := range addrList {
+			addrMap, ok := a.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			if addr, ok := addrMap["addr"].(string); ok {
+				ips = append(ips, addr)
+			}
+		}
+		if len(ips) > 0 {
+			parts = append(parts, fmt.Sprintf("%s: %s", netName, strings.Join(ips, ", ")))
+		}
+	}
+	return strings.Join(parts, "; ")
 }
 
 // Related returns navigable related resources for a server.
@@ -171,6 +296,32 @@ func (s *Server) Related(ctx context.Context, c *client.OpenStack, id string) ([
 				ID:          netID,
 				DisplayName: netName,
 			})
+		}
+	}
+
+	// Floating IPs (from addresses with OS-EXT-IPS:type == "floating")
+	fipAddrToID := buildFloatingIPAddrToIDMap(ctx, c)
+	for _, addrs := range srv.Addresses {
+		addrList, ok := addrs.([]interface{})
+		if !ok {
+			continue
+		}
+		for _, a := range addrList {
+			addrMap, ok := a.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			ipType, _ := addrMap["OS-EXT-IPS:type"].(string)
+			addr, _ := addrMap["addr"].(string)
+			if ipType == "floating" && addr != "" {
+				if fipID, ok := fipAddrToID[addr]; ok {
+					related = append(related, RelatedResource{
+						Kind:        "floatingip",
+						ID:          fipID,
+						DisplayName: addr,
+					})
+				}
+			}
 		}
 	}
 
