@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
@@ -331,6 +332,9 @@ type QuotaInfo struct {
 
 func (c *OpenStack) FetchQuotas(ctx context.Context) QuotaInfo {
 	var info QuotaInfo
+
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 
 	// Compute quotas (CPUs, RAM)
 	computeClient, err := c.Compute()
