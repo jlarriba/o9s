@@ -166,11 +166,14 @@ func (a *App) setupKeys() {
 			case 'r':
 				a.Reload()
 				return nil
-			case 'm':
+			case 'v':
 				a.startServer()
 				return nil
 			case 'n':
 				a.stopServer()
+				return nil
+			case 'm':
+				a.showServerMetrics()
 				return nil
 			case 'l':
 				a.showServerLogs()
@@ -238,9 +241,7 @@ func (a *App) ShowDetail(id string) {
 		a.tviewApp.QueueUpdateDraw(func() {
 			a.detailLoading = false
 			if err != nil {
-				a.detail.view.Clear()
-				a.detail.view.SetTitle(" Error ")
-				fmt.Fprintf(a.detail.view, "[red]%s", err.Error())
+				a.detail.ShowError(err.Error())
 			} else {
 				a.detail.Show(a.currentRes.Kind(), data)
 			}
@@ -477,10 +478,40 @@ func (a *App) showServerLogs() {
 				a.showError(fmt.Sprintf("logs failed: %s", err))
 				return
 			}
-			a.detail.view.Clear()
-			a.detail.view.SetTitle(fmt.Sprintf(" logs: %s ", name))
-			fmt.Fprint(a.detail.view, output)
-			a.detail.view.ScrollToEnd()
+			a.detail.ShowLogs(fmt.Sprintf("logs: %s", name), output)
+			a.pages.SwitchToPage("detail")
+			a.tviewApp.SetFocus(a.detail.view)
+		})
+	}()
+}
+
+func (a *App) showServerMetrics() {
+	if a.currentRes == nil || a.currentRes.Kind() != "server" {
+		return
+	}
+	srv, ok := a.currentRes.(*resource.Server)
+	if !ok {
+		return
+	}
+	id := a.getSelectedID()
+	name := a.getSelectedName()
+	if id == "" {
+		return
+	}
+	go func() {
+		ctx := context.Background()
+		data := srv.Metrics(ctx, a.osClient, id)
+		pct := srv.PctMetrics(ctx, a.osClient, id)
+		a.tviewApp.QueueUpdateDraw(func() {
+			if len(data) == 0 {
+				a.showError("no metrics available for this VM")
+				return
+			}
+			a.detail.ShowMetrics(
+				fmt.Sprintf("metrics: %s", name),
+				data,
+				pct.CPU, pct.Mem, pct.Disk,
+			)
 			a.pages.SwitchToPage("detail")
 			a.tviewApp.SetFocus(a.detail.view)
 		})
