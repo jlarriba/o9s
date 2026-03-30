@@ -98,8 +98,6 @@ func (s *Server) Show(ctx context.Context, c *client.OpenStack, id string) ([][2
 
 	imageNames := buildImageNameMap(ctx, c)
 	flavorNames := buildFlavorNameMap(ctx, c)
-	metricsMap := fetchServerMetrics(ctx, c)
-	m := metricsMap[id]
 
 	result := [][2]string{
 		{"Name", srv.Name},
@@ -110,9 +108,6 @@ func (s *Server) Show(ctx context.Context, c *client.OpenStack, id string) ([][2
 		{"Host ID", srv.HostID},
 		{"Flavor", resolveFlavorName(*srv, flavorNames)},
 		{"Image", resolveImageName(*srv, imageNames)},
-		{"CPU Usage", m.cpuPct},
-		{"Memory Usage", m.memPct},
-		{"Disk Usage", m.diskPct},
 		{"IPs", extractIPs(*srv)},
 		{"Key Name", srv.KeyName},
 		{"Created", srv.Created.String()},
@@ -124,15 +119,39 @@ func (s *Server) Show(ctx context.Context, c *client.OpenStack, id string) ([][2
 		{"Metadata", fmt.Sprintf("%v", srv.Metadata)},
 	}
 
-	// Append full metrics from Aetos
-	vmMetrics := fetchVMMetrics(ctx, c, id)
-	if len(vmMetrics) > 0 {
-		result = append(result, [2]string{"", ""}) // blank separator
-		result = append(result, [2]string{"--- METRICS ---", ""})
-		result = append(result, vmMetrics...)
-	}
-
 	return result, nil
+}
+
+// Metrics returns all ceilometer metrics for a specific VM as key-value pairs.
+func (s *Server) Metrics(ctx context.Context, c *client.OpenStack, id string) [][2]string {
+	return fetchVMMetrics(ctx, c, id)
+}
+
+// ServerPctMetrics holds percentage values for pie chart rendering.
+type ServerPctMetrics struct {
+	CPU  float64 // 0-100, -1 if unavailable
+	Mem  float64
+	Disk float64
+}
+
+// PctMetrics returns CPU, memory, and disk usage as float64 percentages.
+func (s *Server) PctMetrics(ctx context.Context, c *client.OpenStack, id string) ServerPctMetrics {
+	m := fetchServerMetrics(ctx, c)
+	sm := m[id]
+	return ServerPctMetrics{
+		CPU:  parsePct(sm.cpuPct),
+		Mem:  parsePct(sm.memPct),
+		Disk: parsePct(sm.diskPct),
+	}
+}
+
+func parsePct(s string) float64 {
+	s = strings.TrimSuffix(s, "%")
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return -1
+	}
+	return f
 }
 
 func (s *Server) Delete(ctx context.Context, c *client.OpenStack, id string) error {
@@ -161,7 +180,7 @@ func fetchServerMetrics(ctx context.Context, c *client.OpenStack) map[string]ser
 	memUsageData := queryMetric(ctx, metricClient, "ceilometer_memory_usage")
 	memTotalData := queryMetric(ctx, metricClient, "ceilometer_memory")
 	diskUsageData := queryMetric(ctx, metricClient, "ceilometer_disk_device_usage")
-	diskTotalData := queryMetric(ctx, metricClient, "ceilometer_disk_root_size")
+	diskTotalData := queryMetric(ctx, metricClient, "ceilometer_disk_device_capacity")
 
 	// Build per-VM maps: resource label → value
 	cpuRateByVM := metricByResource(cpuRateData)
@@ -169,7 +188,7 @@ func fetchServerMetrics(ctx context.Context, c *client.OpenStack) map[string]ser
 	memUsageByVM := metricByResource(memUsageData)
 	memTotalByVM := metricByResource(memTotalData)
 	diskUsageByVM := metricByResourceDisk(diskUsageData)
-	diskTotalByVM := metricByResource(diskTotalData)
+	diskTotalByVM := metricByResourceDisk(diskTotalData)
 
 	// Collect all VM IDs
 	allIDs := map[string]bool{}
@@ -203,11 +222,10 @@ func fetchServerMetrics(ctx context.Context, c *client.OpenStack) map[string]ser
 			}
 		}
 
-		// DISK%: disk_device_usage (bytes) / disk_root_size (GiB→bytes) * 100
+		// DISK%: disk_device_usage (bytes) / disk_device_capacity (bytes) * 100
 		if usage, ok := diskUsageByVM[id]; ok {
-			if totalGiB, ok := diskTotalByVM[id]; ok && totalGiB > 0 {
-				totalBytes := totalGiB * 1024 * 1024 * 1024
-				pct := (usage / totalBytes) * 100
+			if total, ok := diskTotalByVM[id]; ok && total > 0 {
+				pct := (usage / total) * 100
 				m.diskPct = fmt.Sprintf("%.0f%%", pct)
 			}
 		}
